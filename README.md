@@ -1,33 +1,35 @@
 # SignalWire AI Tutor Bot Demo
 
-A comprehensive demonstration of the SignalWire AI Agent SDK's context/steps feature, showcasing how context-level prompts enable unique teaching philosophies for different subjects.
+A comprehensive demonstration of the SignalWire AI Agent SDK's context/steps feature, showcasing how one intelligent tutor bot adapts its teaching approach and personality for different subjects using context-level prompts.
 
 ## 🌟 Features Demonstrated
 
-- **Context-Level Prompts**: Each subject has its own teaching personality and approach
-- **Context Isolation**: Teaching philosophies remain separate and don't interfere
-- **Multi-Language Support**: Language tutors can speak in their respective languages using ElevenLabs multilingual voices
-- **Structured Workflows**: Clear progression through learning steps
-- **Pedagogical Diversity**: Different teaching methods for different subjects
+- **Context-Level Prompts**: The tutor adapts its teaching personality and approach for each subject
+- **Context Isolation**: Subject-specific teaching philosophies remain separate and don't interfere
+- **Multi-Language Support**: Seamlessly switches languages for language tutoring using ElevenLabs multilingual voices
+- **Structured Workflows**: Clear progression through learning steps within each subject
+- **Pedagogical Diversity**: Different teaching methods automatically applied based on subject matter
 
-## 🎓 Available Tutors
+## 🎓 Subject Specializations
 
-### Professor Marcus - Math Tutor
+The Tutor Bot dynamically adapts its teaching approach based on the subject:
+
+### Math Mode - "Professor Marcus" Persona  
 - **Philosophy**: Mathematics is the language of logic and patterns
 - **Approach**: Systematic problem-solving with visual understanding
 - **Workflow**: Assessment → Guided Solution → Practice
 
-### Language Tutors
-- **Señora Lopez (Spanish)**: Immersion-based learning with cultural connection
-- **Madame Dubois (French)**: Focus on elegance, precision, and pronunciation
-- **Tanaka-sensei (Japanese)**: Cultural understanding and respect
+### Language Modes
+- **Spanish Mode - "Señora Lopez" Persona**: Immersion-based learning with cultural connection
+- **French Mode - "Madame Dubois" Persona**: Focus on elegance, precision, and pronunciation
+- **Japanese Mode - "Tanaka-sensei" Transfer**: *Special case - actually transfers to specialized tutor with authentic Japanese voice*
 
-### Dr. Stevens - Science Tutor
+### Science Mode - "Dr. Stevens" Persona
 - **Philosophy**: Learning through inquiry and experimentation
 - **Approach**: Socratic method, hypothesis formation
 - **Workflow**: Inquiry → Hypothesis → Exploration
 
-### Professor Thompson - History Tutor
+### History Mode - "Professor Thompson" Persona
 - **Philosophy**: History as human experience and its lessons
 - **Approach**: Narrative analysis and cause-effect relationships
 
@@ -59,6 +61,8 @@ cp .env.example .env
 ### 3. Set Up Public Access (Required for SignalWire)
 
 ⚠️ **Important**: SignalWire needs a publicly accessible URL to send calls to your agent. Localhost alone won't work!
+
+**Security Note**: This demo has authentication disabled for easy testing. In production, you should enable authentication to prevent unauthorized access to your agent.
 
 #### Option A: Using ngrok (Recommended for Testing)
 
@@ -170,8 +174,14 @@ The tutor bot uses ElevenLabs voices for multilingual support:
 
 **Why different voice setups?**
 - The multilingual voice handles seamless code-switching between English, Spanish, and French
-- Japanese uses a dedicated voice for authentic pronunciation
+- Japanese uses a dedicated voice for authentic pronunciation and requires a different approach
 - This mirrors real-world language teaching scenarios
+
+**The Japanese Exception:**
+Unlike other subjects where the tutor adapts its persona, Japanese actually transfers to a specialized "Tanaka-sensei" tutor with a dedicated Japanese voice. This is necessary because:
+- Japanese pronunciation requires a native speaker voice
+- Cultural nuances in Japanese teaching are unique
+- The voice change creates an authentic immersion experience
 
 **Alternative Multilingual Voice Options:**
 You can customize the multilingual voice in `.env`:
@@ -194,54 +204,54 @@ MULTILINGUAL_VOICE=elevenlabs.VR6AewLTigWG4xSOukaG:arnold
 │   Triage    │ ← Entry point: "What subject do you need help with?"
 └──────┬──────┘
        │
-       ├─→ Math Context (Professor Marcus)
-       ├─→ Language Selection ─┬─→ Spanish (Señora Lopez)
-       │                       ├─→ French (Madame Dubois)
-       │                       └─→ Japanese (Tanaka-sensei)
-       ├─→ Science Context (Dr. Stevens)
-       ├─→ History Context (Professor Thompson)
-       └─→ Other Context (General Tutor)
+       ├─→ Math Mode (Enhanced with "Professor Marcus" teaching style)
+       ├─→ Language Selection ─┬─→ Spanish Mode ("Señora Lopez" persona)
+       │                       ├─→ French Mode ("Madame Dubois" persona)
+       │                       └─→ Japanese Transfer (to Tanaka-sensei)
+       ├─→ Science Mode (Enhanced with "Dr. Stevens" teaching style)
+       ├─→ History Mode (Enhanced with "Professor Thompson" teaching style)
+       └─→ Other Mode (General tutoring capabilities)
 ```
 
 ### Key Concepts
 
-1. **Context Isolation**: Each context has `.set_isolated(True)` to maintain separate teaching personalities
-2. **Context-Level Prompts**: Teaching philosophy is defined at the context level, not in individual steps
-3. **Step Progression**: Each context has structured steps with completion criteria
-4. **Navigation Control**: Steps define which contexts/steps can be accessed next
+1. **Context Isolation**: Each context has `.set_isolated(True)` to maintain separate teaching personalities within the same tutor
+2. **Context-Level Prompts**: Teaching philosophy is defined at the context level, allowing the tutor to completely adapt its approach
+3. **Step Progression**: Each subject mode has structured steps with completion criteria for optimal learning
+4. **Navigation Control**: Steps define which contexts/steps can be accessed next while maintaining subject expertise
 
 ## 🛠️ Extending the Demo
 
 ### Adding Skills
 
-To enhance the tutors with additional capabilities:
+To enhance the tutor with additional capabilities across all subjects:
 
 ```python
-# Add web search for smarter responses
+# Add web search for smarter responses in any subject
 self.add_skill("web_search", {
     "api_key": os.getenv("GOOGLE_SEARCH_API_KEY"),
     "search_engine_id": os.getenv("GOOGLE_SEARCH_ENGINE_ID")
 })
 
-# Add math calculations
+# Add math calculations (enhances math mode and other subjects)
 self.add_skill("math")
 
-# Add datetime for scheduling
+# Add datetime for scheduling (useful for all subjects)
 self.add_skill("datetime")
 ```
 
-### Creating New Subjects
+### Creating New Subject Modes
 
-To add a new subject tutor:
+To add a new subject specialization to the tutor:
 
 ```python
-# Create new context
+# Create new context mode
 programming = contexts.add_context("programming") \
     .set_isolated(True) \
-    .add_section("Role", "You are Professor Ada, a programming mentor...") \
+    .add_section("Role", "You are now operating in Programming Mode, channeling the expertise of Professor Ada...") \
     .add_section("Teaching Philosophy", "Code is poetry that computers can understand...")
 
-# Add steps
+# Add steps for this mode
 programming.add_step("language_choice") \
     .add_section("Current Task", "Determine which programming language to teach") \
     .set_step_criteria("Programming language selected") \
@@ -252,15 +262,14 @@ programming.add_step("language_choice") \
 
 ### Main Components
 
-1. **TutorBotAgent Class**: The main agent with all contexts and steps
-2. **Context Definitions**: Each subject is a separate context with unique prompts
-3. **Step Workflows**: Learning progression within each subject
+1. **TutorBotAgent Class**: The single intelligent tutor with multiple subject specializations
+2. **Context Definitions**: Each subject mode with unique teaching approaches and personas
+3. **Step Workflows**: Learning progression within each subject specialization
 4. **Language Support**: Multi-language configuration with ElevenLabs voices
 
 ### Context vs Step Prompts
 
-- **Context Prompts**: Define the overall teaching personality
-- **Step Prompts**: Define specific tasks within the learning process
-
+- **Context Prompts**: Define the tutor's teaching personality and approach for each subject
+- **Step Prompts**: Define specific tasks within the learning process for that subject mode
 
 Built using SignalWire AI Agent SDK 
