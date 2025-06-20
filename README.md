@@ -56,42 +56,83 @@ Copy `.env.example` to `.env` and customize if needed:
 cp .env.example .env
 ```
 
-### 3. Run the Demo
+### 3. Set Up Public Access (Required for SignalWire)
 
-**Option A: Using the run script (Recommended)**
+⚠️ **Important**: SignalWire needs a publicly accessible URL to send calls to your agent. Localhost alone won't work!
 
-Windows:
+#### Option A: Using ngrok (Recommended for Testing)
+
+1. **Install ngrok**:
+   - Download from [ngrok.com](https://ngrok.com/download)
+   - Or install via package manager:
+     ```bash
+     # macOS
+     brew install ngrok/ngrok/ngrok
+     
+     # Windows (with Chocolatey)
+     choco install ngrok
+     ```
+
+2. **Start your agent first**:
+   ```bash
+   # Windows
+   run.bat
+   
+   # macOS/Linux
+   ./run.sh
+   ```
+   The agent will start on port 3000 by default.
+
+3. **In a new terminal, start ngrok**:
+   ```bash
+   ngrok http 3000
+   ```
+
+4. **Copy your public URL**:
+   ngrok will display something like:
+   ```
+   Forwarding  https://abc123.ngrok-free.app -> http://localhost:3000
+   ```
+   Your SignalWire webhook URL will be: `https://abc123.ngrok-free.app/tutor`
+
+#### Option B: Using localtunnel
+
 ```bash
-run.bat
+# Install localtunnel
+npm install -g localtunnel
+
+# Start tunnel on port 3000
+lt --port 3000 --subdomain your-custom-name
+
+# Your URL will be: https://your-custom-name.loca.lt/tutor
 ```
 
-macOS/Linux:
+#### Option C: Using cloudflared (Cloudflare Tunnel)
+
 ```bash
-chmod +x run.sh  # First time only
-./run.sh
+# Install cloudflared
+# Visit: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+# Start tunnel
+cloudflared tunnel --url http://localhost:3000
+
+# Your URL will be provided in the output
 ```
 
-**Option B: Manual activation**
+### 4. Configure SignalWire
 
-Windows:
-```bash
-venv\Scripts\activate
-python tutor_bot_demo.py
-```
-
-macOS/Linux:
-```bash
-source venv/bin/activate
-python tutor_bot_demo.py
-```
-
-The agent will start on `http://localhost:3000/tutor`
+1. Log into your [SignalWire Space](https://signalwire.com)
+2. Go to **AI Gateway** → **AI Agents**
+3. Create a new agent or update existing one
+4. Set the webhook URL to your public URL (e.g., `https://abc123.ngrok-free.app/tutor`)
+5. Save and test with a phone call
 
 ## 📋 System Requirements
 
 - Python 3.8 or higher
-- Internet connection (for SignalWire API)
+- Internet connection (for SignalWire API and proxy)
 - Approximately 500MB disk space for dependencies
+- A proxy tool (ngrok, localtunnel, or similar) for public access
 
 ## 🔧 Configuration Options
 
@@ -103,48 +144,58 @@ TUTOR_BOT_HOST=0.0.0.0
 TUTOR_BOT_PORT=3000
 TUTOR_BOT_ROUTE=/tutor
 
-# Proxy Configuration (if using ngrok)
-PROXY_URL=https://your-proxy.ngrok.io
-
 # Debug Mode
 DEBUG=false
 
 # Optional: Override Multilingual Voice
-MULTILINGUAL_VOICE=elevenlabs.domi:multilingual
+MULTILINGUAL_VOICE=elevenlabs.bIHbv24MWmeRgasZH58o:multilingual
+
+# SignalWire Credentials (if using authentication)
+# SIGNALWIRE_USERNAME=your_username
+# SIGNALWIRE_PASSWORD=your_password
 ```
 
 ### 🎙️ Voice Configuration
 
-The tutor bot uses **one consistent ElevenLabs multilingual voice** for all languages: `elevenlabs.domi:multilingual`
+The tutor bot uses ElevenLabs voices for multilingual support:
 
-**Why one voice for all languages?**
-- **Seamless Code-Switching**: Language tutors naturally mix languages (e.g., French teacher explaining grammar in English but speaking French examples)
-- **Consistent Experience**: Same voice quality across all tutors
-- **Proper Pronunciation**: The multilingual model handles authentic pronunciation for all languages
-- **Pedagogically Correct**: Mirrors real-world language teaching where instructors code-switch
+**Default Voices:**
+- **Multilingual Voice** (EN/ES/FR): `elevenlabs.bIHbv24MWmeRgasZH58o:multilingual`
+- **Japanese Voice**: `elevenlabs.Mv8AjrYZCBkdsmDHNwcB`
+
+**Why different voice setups?**
+- The multilingual voice handles seamless code-switching between English, Spanish, and French
+- Japanese uses a dedicated voice for authentic pronunciation
+- This mirrors real-world language teaching scenarios
 
 **Alternative Multilingual Voice Options:**
-- `elevenlabs.charlotte:multilingual` - Sophisticated, clear
-- `elevenlabs.sarah:multilingual` - Warm, friendly  
-- `elevenlabs.liam:multilingual` - Professional, articulate
-- `elevenlabs.Antoni:multilingual` - Expressive, engaging
+You can customize the multilingual voice in `.env`:
+```env
+# Female voices
+MULTILINGUAL_VOICE=elevenlabs.21m00Tcm4TlvDq8ikWAM:rachel
+MULTILINGUAL_VOICE=elevenlabs.EXAVITQu4vr4xnSDxMaL:bella
 
-You can customize the voice by editing the `.env` file and uncommenting `MULTILINGUAL_VOICE=your-preferred-voice`.
+# Male voices  
+MULTILINGUAL_VOICE=elevenlabs.ErXwobaYiN019PkySvjV:antoni
+MULTILINGUAL_VOICE=elevenlabs.VR6AewLTigWG4xSOukaG:arnold
+```
 
 ## 🎯 How It Works
 
 ### Context Flow
 
-```mermaid
-graph TD
-    A[Triage Context] --> B{Subject?}
-    B --> C[Math Context]
-    B --> D[Language Selection]
-    B --> E[Science Context]
-    B --> F[History Context]
-    D --> G[Spanish]
-    D --> H[French]
-    D --> I[Japanese]
+```
+┌─────────────┐
+│   Triage    │ ← Entry point: "What subject do you need help with?"
+└──────┬──────┘
+       │
+       ├─→ Math Context (Professor Marcus)
+       ├─→ Language Selection ─┬─→ Spanish (Señora Lopez)
+       │                       ├─→ French (Madame Dubois)
+       │                       └─→ Japanese (Tanaka-sensei)
+       ├─→ Science Context (Dr. Stevens)
+       ├─→ History Context (Professor Thompson)
+       └─→ Other Context (General Tutor)
 ```
 
 ### Key Concepts
@@ -210,23 +261,35 @@ programming.add_step("language_choice") \
 
 ### Common Issues
 
-1. **Port Already in Use**
+1. **"Can't connect to agent"**
+   - Ensure you've set up a proxy (ngrok, localtunnel, etc.)
+   - Check that the proxy is running and forwarding to the correct port
+   - Verify the webhook URL in SignalWire matches your proxy URL
+
+2. **Port Already in Use**
    ```bash
    # Change port in .env
    TUTOR_BOT_PORT=3001
+   # Remember to update your proxy command too:
+   ngrok http 3001
    ```
 
-2. **Dependencies Not Installing**
+3. **ngrok Connection Issues**
+   - Free ngrok has session limits; consider creating a free account
+   - Try restarting both the agent and ngrok
+   - Check ngrok dashboard for errors: http://localhost:4040
+
+4. **Dependencies Not Installing**
    ```bash
    # Try upgrading pip first
    pip install --upgrade pip
    pip install -r requirements.txt
    ```
 
-3. **Agent Not Starting**
-   - Check Python version: `python --version` (needs 3.8+)
-   - Ensure virtual environment is activated
-   - Check for error messages in console
+5. **Voice Not Working**
+   - Ensure you're using valid ElevenLabs voice IDs
+   - Check that SignalWire has ElevenLabs integration enabled
+   - Try with default voices first before customizing
 
 ## 🤝 Contributing
 
@@ -246,6 +309,7 @@ This demo is provided as-is for educational purposes.
 - [SignalWire Documentation](https://docs.signalwire.com)
 - [Context/Steps Guide](https://github.com/signalwire/signalwire-agents/docs/contexts_guide.md)
 - [ElevenLabs Voice Library](https://elevenlabs.io/voices)
+- [ngrok Documentation](https://ngrok.com/docs)
 
 ---
 
