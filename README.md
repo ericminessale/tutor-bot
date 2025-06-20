@@ -122,10 +122,15 @@ cloudflared tunnel --url http://localhost:3000
 ### 4. Configure SignalWire
 
 1. Log into your [SignalWire Space](https://signalwire.com)
-2. Go to **AI Gateway** → **AI Agents**
-3. Create a new agent or update existing one
-4. Set the webhook URL to your public URL (e.g., `https://abc123.ngrok-free.app/tutor`)
-5. Save and test with a phone call
+2. Go to **Phone Numbers** in the left sidebar
+3. Click on a phone number (or purchase one if needed)
+4. In the **Voice Settings** section:
+   - Set **Handle Calls Using** to "SWML Script"
+   - Choose **External** for the script type
+   - Enter your public webhook URL: `https://abc123.ngrok-free.app/tutor`
+   - Make sure the **Request Method** is set to "POST"
+5. Click **Save** at the bottom of the page
+6. Test by calling the phone number
 
 ## 📋 System Requirements
 
@@ -150,9 +155,9 @@ DEBUG=false
 # Optional: Override Multilingual Voice
 MULTILINGUAL_VOICE=elevenlabs.bIHbv24MWmeRgasZH58o:multilingual
 
-# SignalWire Credentials (if using authentication)
-# SIGNALWIRE_USERNAME=your_username
-# SIGNALWIRE_PASSWORD=your_password
+# Note: This demo has authentication disabled by default
+# The agent accepts all incoming webhook requests
+# To enable authentication, modify the _check_basic_auth method in the code
 ```
 
 ### 🎙️ Voice Configuration
@@ -257,60 +262,5 @@ programming.add_step("language_choice") \
 - **Context Prompts**: Define the overall teaching personality
 - **Step Prompts**: Define specific tasks within the learning process
 
-## 🐛 Troubleshooting
 
-### Common Issues
-
-1. **"Can't connect to agent"**
-   - Ensure you've set up a proxy (ngrok, localtunnel, etc.)
-   - Check that the proxy is running and forwarding to the correct port
-   - Verify the webhook URL in SignalWire matches your proxy URL
-
-2. **Port Already in Use**
-   ```bash
-   # Change port in .env
-   TUTOR_BOT_PORT=3001
-   # Remember to update your proxy command too:
-   ngrok http 3001
-   ```
-
-3. **ngrok Connection Issues**
-   - Free ngrok has session limits; consider creating a free account
-   - Try restarting both the agent and ngrok
-   - Check ngrok dashboard for errors: http://localhost:4040
-
-4. **Dependencies Not Installing**
-   ```bash
-   # Try upgrading pip first
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
-5. **Voice Not Working**
-   - Ensure you're using valid ElevenLabs voice IDs
-   - Check that SignalWire has ElevenLabs integration enabled
-   - Try with default voices first before customizing
-
-## 🤝 Contributing
-
-This is a demo project showcasing SignalWire AI Agent SDK features. Feel free to:
-- Add new subject tutors
-- Enhance existing tutors with skills
-- Improve teaching workflows
-- Add more languages
-
-## 📄 License
-
-This demo is provided as-is for educational purposes.
-
-## 🔗 Resources
-
-- [SignalWire AI Agent SDK](https://github.com/signalwire/signalwire-agents)
-- [SignalWire Documentation](https://docs.signalwire.com)
-- [Context/Steps Guide](https://github.com/signalwire/signalwire-agents/docs/contexts_guide.md)
-- [ElevenLabs Voice Library](https://elevenlabs.io/voices)
-- [ngrok Documentation](https://ngrok.com/docs)
-
----
-
-Built with ❤️ using SignalWire AI Agent SDK 
+Built using SignalWire AI Agent SDK 
