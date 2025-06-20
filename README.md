@@ -14,7 +14,7 @@ A comprehensive demonstration of the SignalWire AI Agent SDK's context/steps fea
 
 The Tutor Bot dynamically adapts its teaching approach based on the subject:
 
-### Math Mode - "Professor Marcus" Persona  
+### Math Mode  
 - **Philosophy**: Mathematics is the language of logic and patterns
 - **Approach**: Systematic problem-solving with visual understanding
 - **Workflow**: Assessment → Guided Solution → Practice
@@ -24,12 +24,12 @@ The Tutor Bot dynamically adapts its teaching approach based on the subject:
 - **French Mode - "Madame Dubois" Persona**: Focus on elegance, precision, and pronunciation
 - **Japanese Mode - "Tanaka-sensei" Transfer**: *Special case - actually transfers to specialized tutor with authentic Japanese voice*
 
-### Science Mode - "Dr. Stevens" Persona
+### Science Mode
 - **Philosophy**: Learning through inquiry and experimentation
 - **Approach**: Socratic method, hypothesis formation
 - **Workflow**: Inquiry → Hypothesis → Exploration
 
-### History Mode - "Professor Thompson" Persona
+### History Mode
 - **Philosophy**: History as human experience and its lessons
 - **Approach**: Narrative analysis and cause-effect relationships
 
