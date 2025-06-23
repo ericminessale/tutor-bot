@@ -9,18 +9,26 @@ This agent demonstrates the SignalWire AI Agent SDK's context/steps system with:
 - Structured learning workflows with clear progression
 - Context isolation to maintain pedagogical integrity
 - Direct context switching between subjects
+- Debug logging and hooks for monitoring
+- Post-prompt hooks for conversation summaries
+- Call recording capabilities
 """
 
 import os
+import json
 from signalwire_agents import AgentBase
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
+# Configure debug logging from environment variables
+os.environ.setdefault('SIGNALWIRE_LOG_MODE', os.getenv('SIGNALWIRE_LOG_MODE', 'default'))
+os.environ.setdefault('SIGNALWIRE_LOG_LEVEL', os.getenv('SIGNALWIRE_LOG_LEVEL', 'info'))
+
 
 class TutorBotAgent(AgentBase):
-    """Advanced Tutor Bot demonstrating context-specific teaching philosophies"""
+    """Advanced Tutor Bot demonstrating context-specific teaching philosophies with debug hooks"""
     
     def __init__(self):
         # Get configuration from environment variables with defaults
@@ -28,12 +36,23 @@ class TutorBotAgent(AgentBase):
         port = int(os.getenv("TUTOR_BOT_PORT", "3000"))
         route = os.getenv("TUTOR_BOT_ROUTE", "/tutor")
         
+        # Get logging configuration
+        suppress_logs = os.getenv("SIGNALWIRE_LOG_MODE", "default") == "off"
+        
         super().__init__(
             name="Tutor Bot",
             route=route,
             host=host,
-            port=port
+            port=port,
+            # Configure logging from environment
+            suppress_logs=suppress_logs
         )
+        
+        # Add debug logging for initialization
+        self.log.info("tutor_bot_initializing", 
+                     host=host, 
+                     port=port, 
+                     route=route)
         
         # Set base prompt for triage/general behavior
         self.prompt_add_section(
@@ -46,15 +65,42 @@ class TutorBotAgent(AgentBase):
                 "Greet students warmly and ask what subject they need help with",
                 "Accept single-word responses like 'math', 'spanish', 'japanese', 'science', 'history' as valid subject selections",
                 "Listen for keywords: math/calculus/algebra, spanish/french/japanese/language, science/physics/chemistry/biology, history",
-                "When student requests Japanese: Inform them about Tanaka-sensei's specialized Japanese voice before transferring",
-                "For all other subjects: Transfer directly to the appropriate tutor",
+                "For specific language requests (Spanish/French/Japanese): Route directly to that language context",
+                "For all other subjects: Use change_context immediately without any transition dialogue",
                 "If unclear, ask clarifying questions",
                 "If they ask for help with something not covered, use the 'other' context"
             ]
         )
         
+        # Set up post-prompt for conversation analytics - Use WEBHOOK instead of local handling
+        webhook_url = os.getenv("POST_PROMPT_WEBHOOK_URL")
+        if webhook_url:
+            # Send post-prompt data to external webhook
+            self.log.info("configuring_post_prompt_webhook", url=webhook_url)
+            self.set_post_prompt_url(webhook_url)
+        
+        # Set up post-prompt text for the AI to generate summary
+        self.set_post_prompt("""
+        Provide a JSON summary of the tutoring session:
+        {
+            "subject": "SUBJECT_TAUGHT",
+            "tutor_persona": "TUTOR_NAME_USED",
+            "session_length": "SHORT/MEDIUM/LONG",
+            "topics_covered": ["list", "of", "topics"],
+            "student_engagement": "LOW/MEDIUM/HIGH",
+            "learning_objectives_met": true/false,
+            "follow_up_needed": true/false,
+            "difficulty_level": "BEGINNER/INTERMEDIATE/ADVANCED"
+        }
+        """)
+        
         # Define contexts and steps
+        print("LOADING UPDATED TUTOR BOT WITH JAPANESE CONFIRMATION STEP")
         contexts = self.define_contexts()
+        
+        # Helper variable for all contexts (for easy navigation in demo)
+        ALL_CONTEXTS = ["math", "spanish", "french", "japanese", "science", "history", "other", "triage"]
+        # Note: Japanese is accessed via japanese_transition step, not directly from greeting
         
         # TRIAGE CONTEXT - Starting point
         triage = contexts.add_context("triage") \
@@ -65,12 +111,12 @@ class TutorBotAgent(AgentBase):
             .add_bullets("Key Actions", [
                 "Warmly greet the student",
                 "Ask what subject they need help with today",
-                "Accept single-word answers like 'math', 'spanish', 'japanese', 'science', 'history' as complete responses",
-                "Listen for: Math, Language (Spanish/French/Japanese), Science, History, or other subjects",
-                "Use change_context to route to the appropriate tutor immediately upon subject identification"
+                "Accept single-word answers like 'math', 'spanish', 'japanese', 'french', 'science', 'history' as complete responses",
+                "If they say 'language' without specifying, ask which language: Spanish, French, or Japanese?"
             ]) \
+            .add_section("CRITICAL Routing Instructions", body="For ALL subjects including Japanese: use change_context immediately WITHOUT any transition dialogue.") \
             .set_step_criteria("Student has clearly indicated which subject they need help with") \
-            .set_valid_contexts(["math", "language_selection", "science", "history", "other"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # MATH CONTEXT - Professor Marcus
         math = contexts.add_context("math") \
@@ -99,7 +145,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("The specific math topic and student's level have been identified") \
             .set_valid_steps(["guided_solution"]) \
-            .set_valid_contexts(["language_selection", "science", "history", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         math.add_step("guided_solution") \
             .add_section("Current Task", "Guide the student through solving their math problem step-by-step") \
@@ -112,7 +158,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("Student has successfully worked through at least one problem") \
             .set_valid_steps(["practice", "assessment"]) \
-            .set_valid_contexts(["language_selection", "science", "history", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         math.add_step("practice") \
             .add_section("Current Task", "Provide practice problems to reinforce learning") \
@@ -124,17 +170,7 @@ class TutorBotAgent(AgentBase):
                 "Review and celebrate progress"
             ]) \
             .set_step_criteria("Student has completed practice problems or wants to end session") \
-            .set_valid_contexts(["language_selection", "science", "history", "other", "triage"])
-        
-        # LANGUAGE SELECTION CONTEXT - Routes to specific languages
-        lang_select = contexts.add_context("language_selection") \
-            .set_isolated(True) \
-            .add_section("Instructions", "When student chooses Japanese, inform them about Tanaka-sensei's specialized voice system before transferring")
-        
-        lang_select.add_step("choose_language") \
-            .set_text("¡Excellent choice! I can help you with Spanish, French, or Japanese. Which language would you like to practice today?") \
-            .set_step_criteria("Student has selected a specific language") \
-            .set_valid_contexts(["spanish", "french", "japanese", "math", "science", "history", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # SPANISH CONTEXT - Señora Lopez
         spanish = contexts.add_context("spanish") \
@@ -150,7 +186,7 @@ class TutorBotAgent(AgentBase):
                 "Celebrate attempts at communication over perfect accuracy"
             ]) \
             .add_section("Voice", "Use a warm, encouraging tone. Mix Spanish and English naturally. Be expressive and animated.") \
-            .add_section("Voice Instructions", "Use the Spanish language for natural Spanish conversation and teaching.")
+            .add_section("Voice Instructions", "ALWAYS use the Spanish-Lopez language for ALL speech in this context. This voice supports both English and Spanish, allowing natural code-switching between languages.")
         
         spanish.add_step("immersion_greeting") \
             .add_section("Current Task", "Begin Spanish lesson and assess student level") \
@@ -162,7 +198,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("Student's Spanish level has been assessed") \
             .set_valid_steps(["conversation_practice"]) \
-            .set_valid_contexts(["french", "japanese", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         spanish.add_step("conversation_practice") \
             .add_section("Current Task", "Engage in conversation practice with Spanish vocabulary") \
@@ -175,7 +211,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("Student has engaged in Spanish conversation for several exchanges") \
             .set_valid_steps(["cultural_lesson", "grammar_moment"]) \
-            .set_valid_contexts(["french", "japanese", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         spanish.add_step("cultural_lesson") \
             .add_section("Current Task", "Share a cultural story or tradition from Mexico or other Spanish-speaking countries") \
@@ -187,7 +223,7 @@ class TutorBotAgent(AgentBase):
                 "Use this as an opportunity to teach vocabulary in context"
             ]) \
             .set_step_criteria("Cultural lesson completed") \
-            .set_valid_contexts(["french", "japanese", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         spanish.add_step("grammar_moment") \
             .add_section("Current Task", "Address a specific grammar point that arose naturally in conversation") \
@@ -199,7 +235,7 @@ class TutorBotAgent(AgentBase):
                 "Keep it brief and practical - this isn't a grammar lecture"
             ]) \
             .set_step_criteria("Grammar point has been practiced in context") \
-            .set_valid_contexts(["french", "japanese", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # FRENCH CONTEXT - Madame Dubois
         french = contexts.add_context("french") \
@@ -215,13 +251,13 @@ class TutorBotAgent(AgentBase):
                 "Build vocabulary through thematic groups",
                 "Practice liaison and enchainement for fluency"
             ]) \
-            .add_section("Voice Instructions", "Use the French language for proper French pronunciation and teaching.")
+            .add_section("Voice Instructions", "ALWAYS use the French-Dubois language for ALL speech in this context. This voice supports both English and French, maintaining proper pronunciation for both languages.")
         
         french.add_step("bonjour") \
             .set_text("Bonjour! Comment allez-vous aujourd'hui? Let's work on your French together. What aspect would you like to focus on - conversation, pronunciation, or perhaps some grammar?") \
             .set_step_criteria("Student has indicated their French learning focus") \
             .set_valid_steps(["french_practice"]) \
-            .set_valid_contexts(["spanish", "japanese", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         french.add_step("french_practice") \
             .add_section("Current Task", "Practice French based on student's chosen focus area") \
@@ -233,11 +269,12 @@ class TutorBotAgent(AgentBase):
                 "Connect language points to French culture"
             ]) \
             .set_step_criteria("French practice session completed") \
-            .set_valid_contexts(["spanish", "japanese", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # JAPANESE CONTEXT - Tanaka-sensei
         japanese = contexts.add_context("japanese") \
             .set_isolated(True) \
+            .set_full_reset(True) \
             .add_section("Role", "You are Tanaka-sensei, a Japanese teacher who emphasizes respect, cultural understanding, and the beauty of Japanese expression.") \
             .add_section("Teaching Philosophy", "Japanese learning requires understanding cultural context, not just language mechanics.") \
             .add_section("Language Approach", "Primarily speak in English while naturally incorporating Japanese words and phrases. Use Japanese for greetings, basic expressions, and when teaching specific vocabulary. Only conduct full Japanese immersion if the student specifically requests it.") \
@@ -249,7 +286,7 @@ class TutorBotAgent(AgentBase):
                 "Connect words to their kanji meanings when relevant",
                 "Build confidence with practical phrases"
             ]) \
-            .add_section("Voice Instructions", "Use your defined Japanese language for authentic pronunciation and teaching, never use the defined English voice.")
+            .add_section("Voice Instructions", "Use the Japanese-Tanaka language for this context. This voice can handle both English instruction and authentic Japanese pronunciation.")
         
         # Pre-transition step - announces the voice change before it happens
         japanese.add_step("voice_transition") \
@@ -258,10 +295,10 @@ class TutorBotAgent(AgentBase):
             .set_valid_steps(["aisatsu"])
         
         japanese.add_step("aisatsu") \
-            .set_text("こんにちは！(Konnichiwa!) Welcome to Japanese learning! I'm Tanaka-sensei, and I'll be your guide. Would you like to practice conversation, learn new kanji characters, or work on grammar structures today?") \
+            .set_text("Konnichiwa! Welcome to Japanese learning! I'm Tanaka-sensei, and I'll be your guide. We'll explore Japanese through cultural context and practical usage. Would you like to practice conversation, learn new kanji characters, or work on grammar structures today?") \
             .set_step_criteria("Student has indicated their Japanese learning focus") \
             .set_valid_steps(["japanese_practice"]) \
-            .set_valid_contexts(["spanish", "french", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         japanese.add_step("japanese_practice") \
             .add_section("Current Task", "Practice Japanese based on student's chosen focus") \
@@ -273,7 +310,7 @@ class TutorBotAgent(AgentBase):
                 "Use examples from Japanese daily life"
             ]) \
             .set_step_criteria("Japanese practice session completed") \
-            .set_valid_contexts(["spanish", "french", "math", "science", "history", "other", "language_selection", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # SCIENCE CONTEXT - Dr. Stevens
         science = contexts.add_context("science") \
@@ -301,7 +338,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("Science topic and student's current understanding identified") \
             .set_valid_steps(["hypothesis"]) \
-            .set_valid_contexts(["math", "language_selection", "history", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         science.add_step("hypothesis") \
             .add_section("Current Task", "Guide student to form hypotheses") \
@@ -314,7 +351,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("Student has formed at least one hypothesis") \
             .set_valid_steps(["exploration"]) \
-            .set_valid_contexts(["math", "language_selection", "history", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         science.add_step("exploration") \
             .add_section("Current Task", "Explore the science concept through guided discovery") \
@@ -326,7 +363,7 @@ class TutorBotAgent(AgentBase):
                 "Address misconceptions gently"
             ]) \
             .set_step_criteria("Core scientific concept has been explored and understood") \
-            .set_valid_contexts(["math", "language_selection", "history", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # HISTORY CONTEXT - Professor Thompson
         history = contexts.add_context("history") \
@@ -353,7 +390,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("Historical topic has been selected") \
             .set_valid_steps(["historical_exploration"]) \
-            .set_valid_contexts(["math", "language_selection", "science", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         history.add_step("historical_exploration") \
             .add_section("Current Task", "Explore historical events through storytelling and analysis") \
@@ -366,7 +403,7 @@ class TutorBotAgent(AgentBase):
                 "Ask 'What would you have done?' questions"
             ]) \
             .set_step_criteria("Historical topic has been thoroughly explored") \
-            .set_valid_contexts(["math", "language_selection", "science", "other", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # OTHER CONTEXT - General Tutor
         other = contexts.add_context("other") \
@@ -393,7 +430,7 @@ class TutorBotAgent(AgentBase):
             ]) \
             .set_step_criteria("Subject and learning goals have been identified") \
             .set_valid_steps(["general_tutoring"]) \
-            .set_valid_contexts(["math", "language_selection", "science", "history", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         other.add_step("general_tutoring") \
             .add_section("Current Task", "Provide tutoring support for the identified subject") \
@@ -406,11 +443,12 @@ class TutorBotAgent(AgentBase):
                 "Suggest additional resources if needed"
             ]) \
             .set_step_criteria("Student has received help with their subject or wants to switch topics") \
-            .set_valid_contexts(["math", "language_selection", "science", "history", "triage"])
+            .set_valid_contexts(ALL_CONTEXTS)
         
         # Configure languages for multilingual support
-        # Using one consistent multilingual voice for seamless code-switching
+        # Get voice configuration from environment variables
         multilingual_voice = os.getenv("MULTILINGUAL_VOICE", "elevenlabs.bIHbv24MWmeRgasZH58o:multilingual")
+        japanese_voice = os.getenv("JAPANESE_VOICE", "elevenlabs.Mv8AjrYZCBkdsmDHNwcB")
         
         self.add_language(
             name="English",
@@ -419,21 +457,21 @@ class TutorBotAgent(AgentBase):
         )
         
         self.add_language(
-            name="Spanish",
+            name="Spanish-Lopez",
             code="es-MX",
             voice=multilingual_voice
         )
         
         self.add_language(
-            name="French", 
+            name="French-Dubois", 
             code="fr-FR",
             voice=multilingual_voice
         )
         
         self.add_language(
-            name="Japanese",
+            name="Japanese-Tanaka",
             code="ja-JP",
-            voice="elevenlabs.Mv8AjrYZCBkdsmDHNwcB"  # Different voice for Japanese
+            voice=japanese_voice  # Configurable Japanese voice
         )
         
         # Add fillers for natural conversation
@@ -444,15 +482,102 @@ class TutorBotAgent(AgentBase):
             "Good question..."
         ])
         
-        self.add_internal_filler("context_switch", "en-US", [
-            "Let me connect you with the perfect tutor for that...",
-            "I know just the right teacher to help you...",
-            "One moment while I find your specialized tutor..."
-        ])
+        # Log completion of initialization
+        self.log.info("tutor_bot_initialized", 
+                     contexts_defined=True,
+                     languages_configured=len(self._languages) if hasattr(self, '_languages') else 0)
+
+    def on_summary(self, summary, raw_data=None):
+        """
+        Handle post-prompt conversation summary for analytics and debugging
+        
+        NOTE: This method is only called when NO external webhook URL is set.
+        If POST_PROMPT_WEBHOOK_URL is configured, the summary will be sent
+        to that webhook instead of calling this method.
+        
+        Args:
+            summary: Dictionary containing the structured conversation summary
+            raw_data: Complete raw POST data from the request (optional)
+        """
+        webhook_url = os.getenv("POST_PROMPT_WEBHOOK_URL")
+        if webhook_url:
+            self.log.debug("summary_sent_to_webhook", url=webhook_url)
+            # The summary was sent to the webhook, this method won't be called
+            return
+        
+        self.log.info("tutor_session_completed_locally", summary=summary)
+        
+        if summary:
+            # Extract key metrics
+            subject = summary.get("subject", "unknown")
+            tutor_persona = summary.get("tutor_persona", "unknown")
+            engagement = summary.get("student_engagement", "unknown")
+            objectives_met = summary.get("learning_objectives_met", False)
+            follow_up_needed = summary.get("follow_up_needed", False)
+            
+            # Log detailed session metrics
+            self.log.info("session_analytics",
+                         subject=subject,
+                         tutor=tutor_persona,
+                         engagement=engagement,
+                         success=objectives_met,
+                         needs_followup=follow_up_needed)
+            
+            # Print to console for immediate feedback (useful in development)
+            print("=" * 60)
+            print("TUTORING SESSION COMPLETED (LOCAL PROCESSING)")
+            print("=" * 60)
+            print(f"Subject: {subject}")
+            print(f"Tutor: {tutor_persona}")
+            print(f"Student Engagement: {engagement}")
+            print(f"Learning Objectives Met: {objectives_met}")
+            print(f"Follow-up Needed: {follow_up_needed}")
+            
+            if summary.get("topics_covered"):
+                print(f"Topics Covered: {', '.join(summary['topics_covered'])}")
+            
+            print("=" * 60)
+            
+            # In a production system, you might:
+            # - Store this data in a database for analytics
+            # - Trigger follow-up emails if needed
+            # - Update student progress tracking
+            # - Generate reports for educators
+            
+        # Log raw data if available (useful for debugging)
+        if raw_data:
+            self.log.debug("post_prompt_raw_data", 
+                          has_global_data=bool(raw_data.get("global_data")),
+                          has_summary=bool(raw_data.get("summary")),
+                          data_keys=list(raw_data.keys()))
 
     def _check_basic_auth(self, request) -> bool:
         """Override to disable authentication requirement"""
         return True
+    
+
+    # Debug hook for SWAIG function calls
+    def _execute_swaig_function(self, function_name: str, args=None, call_id=None, raw_data=None):
+        """Override to add debug logging for function executions"""
+        self.log.debug("swaig_function_called", 
+                      function=function_name,
+                      args=args,
+                      call_id=call_id)
+        
+        try:
+            # Call the parent implementation
+            result = super()._execute_swaig_function(function_name, args, call_id, raw_data)
+            
+            self.log.debug("swaig_function_completed", 
+                          function=function_name,
+                          success=True)
+            
+            return result
+        except Exception as e:
+            self.log.error("swaig_function_failed", 
+                          function=function_name,
+                          error=str(e))
+            raise
 
 
 def main():
@@ -462,8 +587,12 @@ def main():
     port = int(os.getenv("TUTOR_BOT_PORT", "3000"))
     route = os.getenv("TUTOR_BOT_ROUTE", "/tutor")
     debug = os.getenv("DEBUG", "false").lower() == "true"
+    
+    # Get new configuration options
     multilingual_voice = os.getenv("MULTILINGUAL_VOICE", "elevenlabs.bIHbv24MWmeRgasZH58o:multilingual")
-    japanese_voice = "elevenlabs.Mv8AjrYZCBkdsmDHNwcB"
+    japanese_voice = os.getenv("JAPANESE_VOICE", "elevenlabs.Mv8AjrYZCBkdsmDHNwcB")
+    log_mode = os.getenv("SIGNALWIRE_LOG_MODE", "default")
+    log_level = os.getenv("SIGNALWIRE_LOG_LEVEL", "info")
     
     print("=" * 80)
     print("SIGNALWIRE AI TUTOR BOT DEMO")
@@ -490,10 +619,21 @@ def main():
     print(f"  Host: {host}")
     print(f"  Port: {port}")
     print(f"  Route: {route}")
-    print(f"  Multilingual Voice (EN/ES/FR): {multilingual_voice}")
-    print(f"  Japanese Voice: {japanese_voice}")
     print(f"  Debug: {debug}")
     print(f"  Authentication: Disabled")
+    print()
+    print(f"New Features Configuration:")
+    print(f"  Log Mode: {log_mode}")
+    print(f"  Log Level: {log_level}")
+    print(f"  Multilingual Voice (EN/ES/FR): {multilingual_voice}")
+    print(f"  Japanese Voice: {japanese_voice}")
+    
+    # Show post-prompt configuration
+    webhook_url = os.getenv("POST_PROMPT_WEBHOOK_URL")
+    if webhook_url:
+        print(f"  Post-Prompt Webhook: {webhook_url}")
+    else:
+        print(f"  Post-Prompt Analytics: Local processing (no webhook)")
     print()
     print(f"Test the agent at: http://{host if host != '0.0.0.0' else 'localhost'}:{port}{route}")
     print()
